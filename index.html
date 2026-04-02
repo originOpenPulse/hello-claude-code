@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Hello Claude Code | Claude Code 源码深度解析与安全研究</title>
+	<meta
+		name="description"
+		content="Claude Code 源码深度解析与安全研究项目。围绕架构、上下文治理、工具系统、MCP、Bridge 与多代理能力，建立一套可连续阅读的研究入口。">
+	<meta property="og:title" content="Hello Claude Code">
+	<meta property="og:description" content="Claude Code 源码深度解析与安全研究项目">
+	<meta property="og:type" content="website">
+	<meta property="og:url" content="https://feuyeux.github.io/hello-claude-code/">
+	<meta name="twitter:card" content="summary_large_image">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link
+		rel="stylesheet"
+		href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;600;700;800&display=swap">
+	<link rel="stylesheet" href="./assets/site.css">
+</head>
+<body>
+	<div class="page-shell">
+		<header class="topbar">
+			<a class="brand" href="./">
+				<span class="brand-mark">HCC</span>
+				<span class="brand-text">Hello Claude Code</span>
+			</a>
+			<nav class="nav">
+				<a href="#reports">入口</a>
+				<a href="#tracks">路径</a>
+				<a href="#map">架构</a>
+				<a href="https://github.com/feuyeux/hello-claude-code">GitHub</a>
+			</nav>
+		</header>
+
+		<main>
+			<section class="hero">
+				<div class="hero-copy reveal">
+					<p class="eyebrow">AGENTIC CLI RESEARCH / SOURCE ANALYSIS / SECURITY STUDY</p>
+					<h1>把一份泄露出来的 Agent CLI，拆成一张能连续阅读的系统地图。</h1>
+					<p class="hero-text">
+						本项目基于 2026 年 3 月 31 日公开流出的 Claude Code 源码快照，
+						围绕架构主线、上下文治理、工具权限、MCP、Bridge、记忆系统与多代理协作，
+						整理出适合持续阅读和交叉验证的分析入口。
+					</p>
+					<div class="hero-actions">
+						<a class="button button-primary" href="#reports">开始阅读</a>
+						<a class="button button-secondary" href="https://github.com/feuyeux/hello-claude-code">查看仓库</a>
+					</div>
+					<ul class="hero-metrics">
+						<li><strong>21</strong><span>统一成稿章节</span></li>
+						<li><strong>3</strong><span>历史分析视角</span></li>
+						<li><strong>50+</strong><span>斜杠命令</span></li>
+						<li><strong>40+</strong><span>工具实现</span></li>
+					</ul>
+				</div>
+
+				<div class="hero-panel reveal">
+					<div class="terminal-bar">
+						<span></span>
+						<span></span>
+						<span></span>
+					</div>
+					<pre class="terminal-code"><code>CLI Entry
+  -> REPL / QueryEngine
+    -> query()
+      -> tools.ts
+        -> services/api/claude.ts
+
+重点专题
+  - context management
+  - prompt runtime
+  - memory system
+  - MCP / Bridge
+  - agents / tasks / remote</code></pre>
+				</div>
+			</section>
+
+			<section class="section reveal" id="reports">
+				<div class="section-head">
+					<p class="section-kicker">Reading Entrypoints</p>
+					<h2>从哪里开始读</h2>
+					<p>首页不再只是 README 直出，而是把不同成熟度和不同视角的文档入口分开。</p>
+				</div>
+				<div class="card-grid card-grid-wide">
+					<article class="card card-featured">
+						<p class="card-label">Canonical</p>
+						<h3>统一成稿目录</h3>
+						<p><code>deep_dive/</code> 是当前唯一的统一分析正文与导航，适合第一次进入仓库时建立整体地图。</p>
+						<a class="card-link" href="./deep_dive/">打开统一入口</a>
+					</article>
+					<article class="card">
+						<p class="card-label">Historical View</p>
+						<h3>Deep Dive GI</h3>
+						<p>Gemini 视角，更偏向工程架构、系统流转和大图景梳理。</p>
+						<a class="card-link" href="./deep_dive_gi/">查看报告</a>
+					</article>
+					<article class="card">
+						<p class="card-label">Historical View</p>
+						<h3>Deep Dive CX</h3>
+						<p>Codex 视角，更偏向源码细节、执行链路和实现机制拆解。</p>
+						<a class="card-link" href="./deep_dive_cx/">查看报告</a>
+					</article>
+					<article class="card">
+						<p class="card-label">Historical View</p>
+						<h3>Deep Dive CC</h3>
+						<p>Claude 视角，更偏向产品思维、能力边界和 Agent 演进逻辑。</p>
+						<a class="card-link" href="./deep_dive_cc/">查看报告</a>
+					</article>
+				</div>
+			</section>
+
+			<section class="section reveal" id="tracks">
+				<div class="section-head">
+					<p class="section-kicker">Shortest Paths</p>
+					<h2>按目标选读</h2>
+					<p>如果你不是来“全仓通读”，这四条路径能更快抵达你关心的问题。</p>
+				</div>
+				<div class="path-grid">
+					<article class="path-card">
+						<h3>跑通一次交互回合</h3>
+						<p>适合先追踪入口、状态、输入、请求和上下文治理主链。</p>
+						<p class="path-tags">startup / REPL / query / compact / tools</p>
+						<a class="card-link" href="./deep_dive/02-startup-flow.html">对应章节</a>
+					</article>
+					<article class="path-card">
+						<h3>理解为什么工程会这么大</h3>
+						<p>适合先看架构分层、配置边界、prompt runtime、memory 与性能治理。</p>
+						<p class="path-tags">architecture / settings / memory / cache</p>
+						<a class="card-link" href="./deep_dive/01-architecture.html">对应章节</a>
+					</article>
+					<article class="path-card">
+						<h3>研究扩展与协议接入</h3>
+						<p>适合聚焦工具系统、技能、插件、MCP、SDK 与 transport 层。</p>
+						<p class="path-tags">tools / plugins / MCP / SDK / transport</p>
+						<a class="card-link" href="./deep_dive/09-extension-skills-plugins-mcp.html">对应章节</a>
+					</article>
+					<article class="path-card">
+						<h3>研究长会话续航能力</h3>
+						<p>适合聚焦上下文压缩、resume、prompt cache、memory consolidation。</p>
+						<p class="path-tags">compaction / resume / cache / memory</p>
+						<a class="card-link" href="./deep_dive/07-context-management.html">对应章节</a>
+					</article>
+				</div>
+			</section>
+
+			<section class="section reveal" id="map">
+				<div class="section-head">
+					<p class="section-kicker">Architecture Snapshot</p>
+					<h2>项目结构速览</h2>
+					<p>这是一个运行在 Bun 上的终端 Agent，而不是浏览器产品。核心是 React + Ink UI 和一套多轮工具调用状态机。</p>
+				</div>
+				<div class="map-grid">
+					<article class="map-card">
+						<h3>主执行链</h3>
+						<ol>
+							<li>CLI 入口解析参数并选择运行模式。</li>
+							<li>REPL 或 QueryEngine 组装会话状态。</li>
+							<li><code>query()</code> 驱动模型请求、流式响应与工具回流。</li>
+							<li><code>tools.ts</code> 按权限上下文装配工具池。</li>
+							<li><code>services/api/claude.ts</code> 负责 provider 路由与请求构造。</li>
+						</ol>
+					</article>
+					<article class="map-card">
+						<h3>高频专题</h3>
+						<ul>
+							<li>上下文治理：snip、microcompact、autocompact、context collapse</li>
+							<li>扩展总线：skills、plugins、MCP、hooks</li>
+							<li>长会话系统：prompt runtime、session storage、memory</li>
+							<li>远程协作：Bridge、agents、tasks、remote session</li>
+						</ul>
+					</article>
+				</div>
+			</section>
+
+			<section class="section reveal" id="about">
+				<div class="section-head">
+					<p class="section-kicker">Project Context</p>
+					<h2>这页在解决什么问题</h2>
+				</div>
+				<div class="note">
+					<p>
+						之前的 GitHub Pages 首页主要是 README 的直接渲染，信息存在，但缺少清晰的阅读层次、
+						统一成稿入口、面向移动端的版式和更强的视觉识别。现在首页的职责被明确为
+						“项目入口页”，而不是“把整个 README 原样摊开”。
+					</p>
+				</div>
+			</section>
+		</main>
+
+		<footer class="footer">
+			<p>统一阅读入口以 <code>deep_dive/</code> 为准，历史视角目录保留为参考材料。</p>
+			<p>
+				<a href="https://github.com/feuyeux/hello-claude-code">GitHub Repository</a>
+				<span> / </span>
+				<a href="https://github.com/feuyeux/hello-claude-code#readme">Repository README</a>
+			</p>
+		</footer>
+	</div>
+</body>
+</html>
