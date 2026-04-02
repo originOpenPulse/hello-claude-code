@@ -144,15 +144,22 @@ flowchart LR
 
 | 文件 | 主题 |
 |------|------|
-| `01_architecture_overview.md` | 整体架构、技术栈、模块职责、交互流程 |
-| `02_startup_flow.md` | 进程启动、首屏关键路径、延迟预取 |
-| `03_request_flow.md` | query 主循环、API 调用、流式处理 |
-| `04_tool_system.md` | Tool 接口、工具注册、权限判定、执行编排 |
-| `05_bridge_remote.md` | 远程控制桥接、传输层、会话管理 |
-| `06_state_management.md` | AppState、store、bootstrap 状态 |
-| `07_mcp_protocol.md` | MCP 客户端、传输、工具集成、资源 |
-| `08_ui_rendering.md` | Ink/React 组件、消息渲染、权限 UI |
-| `09_hooks_system.md` | pre/post tool use hooks、settings 配置 |
-| `10_context_compaction.md` | 多级压缩、token 追踪、context 治理 |
+| `01_architecture.md` | **整体架构**：技术栈、模块职责、交互流程 |
+| `02_startup_flow.md` | **启动流程**：进程启动、首屏关键路径、延迟预取 |
+| `03_repl_and_state.md` | **交互与状态**：Ink/React 控制中心、AppState 存储 |
+| `04_input_command_queue.md` | **输入队列**：用户输入分类、命令排队、消息流转 |
+| `05_query_and_request.md` | **Query 主循环**：多轮状态机、工具回流、流式响应 |
+| `06_tools_and_permissions.md` | **工具系统**：Tool 接口、权限判定、执行编排 |
+| `07_extension_skills_plugins_mcp.md` | **扩展机制**：MCP 协议、技能与插件系统 |
+| `08_agents_tasks_remote.md` | **子代理与任务**：后台任务、远程会话与代理协同 |
+| `09_performance_cache_context.md` | **性能优化**：缓存策略、长会话优化与稳定性 |
+| `10_queryengine_sdk.md` | **SDK 模式**：Headless 路径与内部内核复用 |
+| `11_settings_policy_and_env.md` | **配置与策略**：Settings、MDM Policy 与环境注入 |
+| `12_hooks_lifecycle_and_runtime.md` | **Hooks 运行时**：生命周期钩子、组装与约束 |
+| `13_session_storage_and_resume.md` | **会话恢复**：Transcript 持久化、Session Resume |
+| `14_api_provider_retry_errors.md` | **API 治理**：Provider 选择、重试机制与错误处理 |
+| `15_prompt_system.md` | **Prompt 运行时**：提示词装配、缓存分发与注入 |
+| `16_memory_system.md` | **记忆系统**：长期记忆、KAIROS 日志与知识图谱 |
+| `17_context_management.md` | **上下文治理**：多级压缩、Overflow 恢复与治理 |
 
 其他参考：`deep_dive_cc/`（Claude Code 视角）、`deep_dive_cx/`（Codex 视角，含完整架构图）

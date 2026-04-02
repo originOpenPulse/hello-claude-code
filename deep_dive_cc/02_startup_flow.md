@@ -9,7 +9,7 @@ Claude Code 的启动流程分为以下几个阶段：
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     subgraph Entry["1. 入口点执行"]
         A1["Bun 运行时加载<br/>main.tsx / ink.ts"]
     end
@@ -436,7 +436,43 @@ const proactive = feature('PROACTIVE') || feature('KAIROS')
 preconnectAnthropicApi()
 ```
 
+## 6. 补充：启动阶段的隐藏复杂度
+
+### 6.1 三个启动窗口
+
+启动过程实际上分为三个时间窗口，每个窗口有不同的能力边界：
+
+1. **Import 阶段（进程启动到首行执行）**：MDM 和 keychain 读取在 import 级别就开始了，不是懒加载的。这是最早的副作用。
+
+2. **Setup 阶段（init() 到首屏渲染）**：配置加载、trust 对话、OAuth 验证。此阶段完成后用户才能看到界面。
+
+3. **First Turn 阶段（首屏渲染到首次查询）**：延迟预取（deferred prefetch）在此窗口运行。包括 API 预连接、MCP 服务器连接、技能发现等。首屏渲染 ≠ 首轮查询能力就绪。
+
+### 6.2 Trust 对话的门控范围
+
+Trust 对话不只是 UI 装饰，它实际上门控约 10 种能力：
+- Bash 工具执行
+- 所有 hooks 运行
+- 危险环境变量注入（endpoint URLs、auth tokens）
+- MCP 服务器连接
+- 项目配置加载
+- shell-execution settings（apiKeyHelper、awsAuthRefresh 等）
+
+Trust 来源有三种：home 目录自动信任、.claude/.project.json 显式标记、用户交互确认。
+
+### 6.3 Worktree 创建时机
+
+Worktree 创建必须在 getCommands() 之前完成。否则 /eject 等命令无法正确工作，因为它们依赖工作目录已经切换到 worktree 路径。
+
+### 6.4 MDM 策略轮询
+
+企业托管策略（MDM）不是一次性读取。初始读取发生在 import 阶段，之后每 30 分钟轮询一次更新。策略变更可以在运行时生效，通过 ConfigChange hooks 通知。
+
+### 6.5 Terminal 恢复逻辑
+
+启动时会备份当前终端状态（iTerm2、Terminal.app）。这说明 Claude Code 是一个"侵入式 TUI 产品"——它会修改终端设置，退出时需要恢复。如果进程异常退出，终端可能处于异常状态。
+
 ---
 
-*文档版本: 1.0*
-*分析日期: 2026-03-31*
+*文档版本: 1.1*
+*分析日期: 2026-04-02*

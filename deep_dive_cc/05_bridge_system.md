@@ -9,7 +9,7 @@
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     subgraph Local["本地 CLI"]
         A1["REPL<br/>本地命令行"]
     end
@@ -115,7 +115,7 @@ async function fetchRemoteCredentials(
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     A["write(stream_event)"] --> B["缓冲队列<br/>100ms 定时器"]
     A1["write(other)"] --> C["立即 flush"]
 
@@ -179,7 +179,7 @@ export class SerialBatchEventUploader<T> {
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     A["SSE/WebSocket 消息"] --> B{"消息类型?"}
 
     B -->|user| C["onInboundMessage"]
@@ -303,7 +303,7 @@ async function recoverFromAuthFailure(): Promise<void> {
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     A["JWT 刷新/401 错误"] --> B["flushGate.start()"]
 
     B --> C["暂停写入"]
@@ -462,6 +462,24 @@ async function teardown(): Promise<void> {
   transport.close()
 }
 ```
+
+## 11. 补充：关键实现细节
+
+### 11.1 Worker Epoch 语义
+
+worker_epoch 是 Bridge 会话的版本号。当远程服务器重启或发生故障转移时，epoch 会递增。客户端收到新的 epoch 后必须重建传输层，因为旧的 WebSocket 连接已经失效。这是一个幂等性保证机制——即使客户端收到多次相同的 epoch，也不会重复重建。
+
+### 11.2 并发消息处理
+
+Bridge 使用 BoundedUUIDSet 做消息去重，分别维护 sent 和 received 两个集合。集合大小有上限，超过后自动驱逐最旧的条目。这意味着在极端情况下（非常长的会话），理论上可能出现重复消息。但实际上 UUID 冲突的概率极低。
+
+### 11.3 WebSocket 心跳
+
+HybridTransport 继承自 WebSocketTransport，后者实现了基于 ping/pong 帧的心跳机制。心跳间隔和超时由服务端配置控制。心跳失败会触发重连流程。
+
+### 11.4 重连退避策略
+
+WebSocket 重连使用指数退避：1 秒起步，最大 30 秒，每次失败翻倍。成功连接后重置计数器。重连期间通过 FlushGate 缓冲所有写操作，防止消息丢失。
 
 ---
 

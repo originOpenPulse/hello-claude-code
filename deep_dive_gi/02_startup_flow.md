@@ -1,73 +1,10 @@
-# 2. 启动流程深度解析
+# 2. 启动流程详解：从二进制执行到 REPL 交互
 
-本报告对 `claude-code` 的启动流程进行代码级的深度分析，追踪从用户执行 `claude` 命令到交互式 REPL 界面呈现的全过程。
+本篇拆解 Claude Code CLI 从进程启动到会话可交互之间的全时序流程，揭示其如何通过异步并行与延迟加载实现极致的启动性能。
 
-## 2.1. 启动入口：Bootstrap 阶段 (`cli.tsx`)
+## 2.1 启动时序总览
 
-`claude-code` 的执行入口并非逻辑最复杂的 `main.tsx`，而是轻量级的 `src/entrypoints/cli.tsx`。这种设计是为了实现“快路径（Fast-path）”响应。
-
-### 核心职责：
-1.  **性能分析启动**：第一时间调用 `profileCheckpoint('cli_entry')` 记录启动耗时。
-2.  **快路径处理**：对于 `--version` (-v) 等简单命令，直接输出结果并退出，完全不加载后续数千行的重量级模块。
-3.  **特殊模式分流**：处理 `daemon`（守护进程）、`remote-control`（远程控制）、`mcp` 专用模式等。
-4.  **早期输入捕获 (`startCapturingEarlyInput`)**：这是一个非常关键的设计。在 Node.js 忙于加载和解析后续庞大的 JS 模块时，程序已经开始监听并缓冲用户的键盘输入，确保用户在界面还没出来前输入的字符不会丢失。
-5.  **动态加载主逻辑**：完成初步检查后，通过 `await import("../main.jsx")` 动态加载主模块，这避免了主模块顶部的 side-effects 阻塞 bootstrap 阶段。
-
-## 2.2. 环境预备阶段 (`main.tsx: main()`)
-
-进入 `main.tsx` 的 `main()` 函数后，程序开始进行底层环境的初始化。
-
-### 关键步骤：
-1.  **并行 I/O 加速**：
-    *   `startMdmRawRead()`：后台读取企业 MDM 策略。
-    *   `startKeychainPrefetch()`：后台预读密钥链（OAuth Token、API Key）。
-    这两个任务在主线程继续执行后续逻辑时，在后台线程并行运行，减少了后续同步读取导致的事件循环阻塞（约节省 60-100ms）。
-2.  **安全加固**：设置 `process.env.NoDefaultCurrentDirectoryInExePath = '1'`，防止 Windows 下的 PATH 劫持攻击。
-3.  **参数重写 (Argv Rewriting)**：
-    *   识别 `cc://` 协议、`claude ssh <host>` 或 `claude assistant`。
-    *   将这些高级指令重写为内部可识别的参数组合，从而复用主命令的逻辑，同时保留完整的 TUI 功能。
-4.  **交互模式判断**：通过检查 `-p`、`--init-only` 或 `stdout.isTTY` 确定 `isInteractive` 状态。
-5.  **配置预加载 (`eagerLoadSettings()`)**：在正式进入命令解析前，预先加载标志位相关的配置。
-
-## 2.3. 命令定义与延迟初始化 (`main.tsx: run()`)
-
-`run()` 函数利用 `Commander.js` 构建 CLI 接口，其核心亮点在于 `preAction` 钩子的使用。
-
-### `preAction` 延迟加载机制：
-`program.hook('preAction', ...)` 确保只有在用户执行有效命令（而非 `--help`）时，才触发重量级初始化：
-*   **等待并行任务完成**：执行 `await Promise.all([ensureMdmSettingsLoaded(), ensureKeychainPrefetchCompleted()])`，确保 bootstrap 阶段启动的并行任务已就绪。
-*   **核心服务初始化 (`init()`)**：加载最终合并后的配置、运行数据迁移 (`runMigrations`)。
-*   **遥测启动 (`initSinks()`)**：连接日志和埋点上报服务。
-*   **远程策略加载**：`loadRemoteManagedSettings()`，获取企业级策略限制。
-
-## 2.4. 模式执行与 UI 挂载 (`action` 处理器)
-
-当命令解析完成后，进入 `.action(async (prompt, options) => { ... })`。
-
-### 交互模式 (Interactive Mode) 的展开：
-1.  **环境设置 (`setup()`)**：在 `src/setup.ts` 中完成。
-    *   确定当前工作目录 (`cwd`) 和 Git 根目录。
-    *   处理 `--worktree` 逻辑（如需创建新的 Git 工作树）。
-    *   如果是首次运行，显示 `Onboarding` 引导界面。
-2.  **能力加载**：调用 `getTools()` 加载所有工具（如 Bash, Edit），调用 `getCommands()` 加载斜杠命令。
-3.  **REPL 启动 (`launchRepl`)**：
-    *   **Ink 渲染系统**：通过 `src/ink.ts` 中的 `createRoot` 创建终端 React 根节点。
-    *   **组件树挂载**：渲染 `<App><REPL /></App>`。`App` 负责全局状态和主题，`REPL` 负责对话流展示和输入。
-4.  **非阻塞预取 (`startDeferredPrefetches`)**：
-    在 UI 渲染出第一帧后，`renderAndRun` 会触发此函数。它在后台异步执行：
-    *   `initUser()`：识别用户身份。
-    *   `getSystemContext()`：扫描 Git 状态。
-    *   `countFilesRoundedRg()`：统计项目文件数。
-    这些任务不阻塞首屏显示，提升了用户感知的“启动速度”。
-
-### 非交互模式 (Headless Mode `-p`)：
-调用 `runHeadless()`（位于 `src/query.ts` 或相关模块），它不启动 Ink UI，而是：
-1.  构建单次查询的 `QueryEngine`。
-2.  执行 prompt 并获取结果。
-3.  根据 `--output-format` 输出文本或 JSON。
-4.  进程以 `0` 或错误码退出。
-
-## 2.5. 启动流程数据流图
+Claude Code 的启动可以分为八个阶段：
 
 ```mermaid
 ---
@@ -75,43 +12,95 @@ config:
   theme: neutral
 ---
 sequenceDiagram
-    participant OS as 操作系统/Shell
+    participant OS as 操作系统
     participant CLI as cli.tsx (Bootstrap)
-    participant MAIN as main.tsx (Core)
-    participant CMD as Commander.js (Hook)
-    participant UI as Ink / React (TUI)
+    participant MAIN as main.tsx (Orchestrator)
+    participant SETUP as setup.ts (Session)
+    participant UI as interactiveHelpers (Setup Screens)
+    participant REPL as REPL.tsx (TUI)
 
-    OS->>CLI: 执行 claude -p "hi"
-    CLI->>CLI: profileCheckpoint & 缓冲键盘输入
-    CLI->>MAIN: 动态 import 并调用 main()
-    
-    par 并行初始化
-        MAIN->>MAIN: startMdmRawRead()
-        MAIN->>MAIN: startKeychainPrefetch()
+    OS->>CLI: 执行 `claude`
+    CLI->>CLI: 阶段 1: 早期输入捕获 & Fast-path 检查
+    CLI->>MAIN: 阶段 2: 动态导入 main.tsx
+    par 阶段 3: 并行 I/O 副作用
+        MAIN->>MAIN: profileCheckpoint / MDM 预读 / Keychain 预取
     end
-
-    MAIN->>MAIN: 参数重写 & 模式检测
-    MAIN->>CMD: run() 定义命令 & preAction
-    
-    CMD->>CMD: 解析参数
-    CMD->>CMD: 触发 preAction
-    CMD->>MAIN: init() (配置/迁移/遥测)
-    
-    alt 交互模式
-        MAIN->>UI: launchRepl()
-        UI->>UI: root.render(<App />)
-        UI-->>OS: 绘制终端 UI
-        UI->>MAIN: startDeferredPrefetches()
-    else 非交互模式
-        MAIN->>MAIN: runHeadless()
-        MAIN-->>OS: 输出结果到 stdout
-    end
+    MAIN->>MAIN: 阶段 4: Commander 解析与 preAction Hook
+    MAIN->>SETUP: 阶段 5: setup() 环境初始化 (Worktree/CWD/Hooks)
+    MAIN->>UI: 阶段 6: 建立 Ink Root & showSetupScreens (Trust 边界)
+    UI->>REPL: 阶段 7: 挂载 App & 启动 REPL
+    REPL->>MAIN: 阶段 8: 延迟预取 (System Context / Analytics)
 ```
 
-## 2.6. 总结
+---
 
-`claude-code` 的启动流程体现了极致的性能优化思想：
-*   **分层启动**：通过 `cli.tsx` 过滤快路径，避免不必要的代码加载。
-*   **提前交互**：利用早期输入捕获，让用户在界面加载时即可开始输入。
-*   **异步并发**：将耗时的 I/O 操作（MDM, Keychain, Git Status）全部异步化或并行化，绝不阻塞 UI 主循环。
-*   **按需加载**：通过 `preAction` 和动态 `import`，确保只加载当前路径必需的代码。
+## 2.2 阶段详解
+
+### 阶段 0：物理入口与早期捕获 (`cli.tsx`)
+1. **性能锚点**: 立即调用 `profileCheckpoint('cli_entry')`。
+2. **Fast-path**: 检查 `--version`，若存在则直接输出并 `process.exit(0)`。
+3. **输入缓冲 (`startCapturingEarlyInput`)**: 启动键盘监听。这是为了解决 Node.js 加载大型 JS 模块时的“界面卡顿感”，让用户在首屏出来前就能盲打指令。
+4. **加载主逻辑**: 通过 `await import("../main.js")` 切换到业务逻辑。
+
+### 阶段 1：全局副作用与环境初始化 (`main.tsx`)
+在 `main.tsx` 顶部，有三个不计成本的并行任务：
+- **MDM Raw Read**: 读取企业级托管配置（macOS Plist 或 Windows Registry）。
+- **Keychain Prefetch**: 预读取密钥链中的 OAuth Token 和 API Key。
+- **Warning Handler**: 尽早注册全局警告处理器，防止未处理的 Promise 拒绝导致静默失败。
+
+### 阶段 2：命令分发与 `preAction` 挂钩
+`Commander.js` 的 `program.hook('preAction', ...)` 是启动中的关键关卡：
+- **等待并行任务**: 确保 MDM 和 Keychain 预读已完成。
+- **`init()`**: 执行底层环境初始化、数据库迁移 (`runMigrations`)。
+- **Telemetry**: 初始化 Sink 管道，准备上报埋点。
+- **远程策略**: 触发 `loadRemoteManagedSettings()` 和 `loadPolicyLimits()`（异步，非阻塞）。
+
+### 阶段 3：Session 建立与环境装配 (`setup.ts`)
+`setup()` 函数定义了本次运行的物理上下文：
+1. **会话 ID**: 确定 `sessionId`。
+2. **Git Worktree**: 处理 `--worktree` 选项。如果启用，会执行 `process.chdir()` 切换到新创建的工作区，并重置 CWD。
+3. **Hooks 捕获**: 调用 `captureHooksConfigSnapshot()`，固定本次会话的 Hooks 行为。
+4. **UDS Server**: 启动 Unix Domain Socket 消息服务，用于进程间通信。
+
+### 阶段 4：交互式 Setup Screens (`interactiveHelpers.tsx`)
+在交互模式下，必须先过“信任门控”：
+- **`showSetupScreens()`**: 处理 Onboarding、Trust Dialog、MCP 授权。
+- **安全隔离**: 在用户未接受 Trust 之前，绝不预取任何项目级的环境变量或 `CLAUDE.md` 内容。
+- **信任后动作**: 一旦 Trust 建立，立即解锁 `getSystemContext()` 和 `initializeTelemetryAfterTrust()`。
+
+### 阶段 5：UI 挂载与 REPL 启动
+- **Ink 根节点**: 调用 `createRoot` 创建终端渲染上下文。
+- **组合组件**: `launchRepl` 将 `<App />` (Provider 层) 和 `<REPL />` (视图层) 结合并渲染。
+- **早期输入注入**: 将 `cli.tsx` 阶段捕获的输入流注入到 REPL 的输入框缓冲区中。
+
+### 阶段 6：延迟预取 (Deferred Prefetch)
+为了极致的首屏速度，某些非核心任务被推迟到 UI 渲染出第一帧后：
+- `startDeferredPrefetches()`: 包括用户信息初始化、项目文件数统计 (`countFilesRoundedRg`)、官方 MCP 列表预取、模型能力刷新等。
+
+---
+
+## 2.3 交互 vs 非交互模式的差异
+
+| 特性 | 交互模式 (REPL) | 非交互模式 (`-p`) |
+| --- | --- | --- |
+| **Trust Dialog** | 强制执行 | 隐式信任 (由用户对 `-p` 负责) |
+| **UI 框架** | React / Ink | 无 / Headless Store |
+| **输入来源** | 键盘 / 早期缓冲 | 命令行参数 / Stdin |
+| **执行终点** | `replLauncher.tsx` | `src/cli/print.ts` (runHeadless) |
+| **性能重心** | 首屏交互时间 (TTI) | 总执行耗时 (Latency) |
+
+---
+
+## 2.4 关键源码锚点
+
+| 流程节点 | 代码位置 |
+| --- | --- |
+| 物理入口 | `src/entrypoints/cli.tsx:main()` |
+| 早期输入捕获 | `src/utils/earlyInput.ts:startCapturingEarlyInput()` |
+| 并行 Side-effects | `src/main.tsx:1-20` |
+| 参数重写与 SSH/Connect 处理 | `src/main.tsx:main()` 中段 |
+| Commander 初始化与 Hook | `src/main.tsx:run()` |
+| 工作区初始化 | `src/setup.ts:setup()` |
+| 信任与配置确认屏 | `src/interactiveHelpers.tsx:showSetupScreens()` |
+| REPL 界面渲染 | `src/screens/REPL.tsx` |
+| 非交互式执行引擎 | `src/cli/print.ts:runHeadless()` |

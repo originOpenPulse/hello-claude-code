@@ -63,7 +63,7 @@ src/
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     subgraph CLI["CLI 入口层"]
         A1["main.tsx, init.ts, ink.ts<br/>React Ink UI"]
     end
@@ -309,7 +309,7 @@ export type AppState = DeepImmutable<{
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     A["main.tsx"] --> B["init.ts"]
     B --> C["ink.ts React"]
     B --> D["commands.ts"]
@@ -409,8 +409,46 @@ if (feature('HISTORY_SNIP')) {
 **主入口**: `src/ink.ts` (React Ink 应用)
 **初始化**: `src/entrypoints/init.ts`
 **SDK 入口**: `src/entrypoints/sdk/`
+**MCP 服务器入口**: `src/entrypoints/mcp.ts`
+
+## 9. 架构设计判断
+
+### 9.1 "受控汇聚"而非纯粹分层
+
+三个超大文件——`main.tsx`、`REPL.tsx`（5000+ 行）、`query.ts`（1700+ 行）——是刻意的汇聚点，而不是组织不善。它们分别承担 CLI 入口、交互控制中心、请求状态机的角色。拆分会引入跨文件状态传递的复杂度，得不偿失。
+
+### 9.2 四个统一抽象
+
+整个系统围绕四个核心抽象运转：`Message`、`Tool`、`Command`、`ToolUseContext`。无论是内置工具、MCP 外部工具、Agent 子代理，还是 slash 命令、技能命令、插件命令，最终都归约到这四种类型。这种统一使得权限、遥测、持久化管线只需实现一次。
+
+### 9.3 三层门控系统
+
+代码中存在三层能力门控：
+1. **编译时** feature flags：`feature('FLAG_NAME')` 全部返回 false，后面的代码是死代码
+2. **用户类型门控**：`process.env.USER_TYPE === 'ant'` 区分内部与外部用户
+3. **远程配置**：GrowthBook/Statsig 运行时特性开关
+
+### 9.4 缓存稳定性是一等公民
+
+大量设计决策服务于 Prompt Cache 命中率：
+- 系统 prompt 有显式的 `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` 标记，静态部分跨组织复用
+- 工具池组装时内置工具形成连续前缀，MCP 工具追加在后
+- settings 临时文件路径使用内容哈希（不是随机 UUID），影响 Bash sandbox 列表进而影响 prompt cache key
+- Beta headers 使用 sticky latch 模式，一旦发送就整个会话保持，避免缓存键变化
+
+### 9.5 代码规模参考
+
+| 组件 | 文件数 | 说明 |
+|------|--------|------|
+| src/ 顶层目录 | 44 个子目录 | ~1200+ 文件 |
+| services/api/ | 22 个文件 | claude.ts 126KB 是最大单文件 |
+| services/mcp/ | 23 个文件 | auth.ts 88KB, client.ts 119KB |
+| tools/ | 56 个工具目录 | 每个工具独立目录 |
+| commands/ | 15 文件 + 93 子目录 | ~108 个命令 |
+| components/ | 113 个文件 | React/Ink UI |
+| utils/ | 310 个文件 | 最大的工具库 |
 
 ---
 
-*文档版本: 1.0*
-*分析日期: 2026-03-31*
+*文档版本: 1.1*
+*分析日期: 2026-04-02*

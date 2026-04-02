@@ -9,7 +9,7 @@
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     subgraph Interface["Transport 接口"]
         A1["connect()"]
         A2["write(message)"]
@@ -70,7 +70,7 @@ export interface Transport {
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     A["connect()"] --> B["刷新 Headers"]
     B --> C["创建 WebSocket"]
     C --> D{"连接成功?"}
@@ -117,7 +117,7 @@ private handleReconnect(): void {
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     A["connect()"] --> B["创建 AbortController"]
     B --> C["fetch SSE 端点"]
     C --> D["读取 ReadableStream"]
@@ -145,7 +145,7 @@ flowchart TB
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     subgraph Write["写入流程"]
         A1["write(stream_event)"] --> A2["加入缓冲"]
         A2 --> A3["设置 100ms 定时器"]
@@ -232,7 +232,7 @@ export class HybridTransport extends WebSocketTransport {
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     subgraph Enqueue["入队"]
         A1["enqueue(items)"] --> A2{"队列满?"}
         A2 -->|是| A3["drain()"]
@@ -346,7 +346,7 @@ export class WorkerStateUploader {
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     A["createTransport(type, url, params)"] --> B{"type?"}
 
     B -->|hybrid| C["HybridTransport"]
@@ -379,7 +379,7 @@ enum TransportErrorType {
 config:
   theme: neutral
 ---
-flowchart TB
+flowchart LR
     A["传输错误"] --> B{"错误类型?"}
 
     B -->|auth_error| C["刷新 JWT"]
@@ -396,6 +396,39 @@ flowchart TB
     H -->|是| I["恢复"]
     H -->|否| G
 ```
+
+## 10. 补充：关键实现细节
+
+### 10.1 具体退避参数
+
+SerialBatchEventUploader 的 sendWithRetry 使用以下参数：
+- baseDelayMs: 1000（1 秒）
+- maxDelayMs: 30000（30 秒）
+- 抖动：每次延迟加上 0-50% 的随机值
+- maxConsecutiveFailures: 5（超过后永久标记为 failed）
+
+### 10.2 HTTP POST 状态码处理
+
+HybridTransport 的 POST 请求处理逻辑：
+- 2xx：成功，继续下一批
+- 401：触发 JWT 刷新，然后重建整个传输层
+- 409：协议错误（epoch 不匹配），触发完全重连
+- 429：指数退避重试
+- 其他 4xx：永久失败，不重试
+- 5xx：指数退避重试
+
+### 10.3 CCR 客户端
+
+Cloud Code Runtime (CCR) 客户端是一个独立的通信通道，用于远程会话管理。它不走 HybridTransport，而是直接 HTTP POST。CCR 客户端负责：
+- initialize()：注册 worker
+- sendEvents()：上报事件
+- reportState()：定期状态快照
+
+WorkerStateUploader 以 1 秒间隔批量上报 worker 状态，包括当前活动的工具、消息队列长度等。
+
+### 10.4 流式传输的背压控制
+
+streamEventBuffer 使用固定的 100ms 批量间隔，但当缓冲区超过 1000 条消息时（实际上不太可能），会立即 flush。这个设计在 99.9% 的情况下是按时间触发的，只在极端流量下才触发大小限制。
 
 ---
 
